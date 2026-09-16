@@ -102,3 +102,33 @@ No additional wishlist items are recorded here.
 The scan/status/preview workflow was useful for a real multi-root workspace and
 prevented unsafe bulk writes. Before using an execute-all path, the three
 behaviors above require explicit handling or manual native-Git verification.
+
+## Post-action verification
+
+After the approved repository preservation actions, `status` and `sync --dry-run`
+were rerun on `public-main` (`b326e73`) against the same 10 roots. Both exited 0.
+Native inspection with exact-path safe.directory returned 75 local entries,
+74 physical entries, 56 Git roots and 18 no-Git directories. The PARTY_BOT
+junction was counted once by the native reconciliation.
+
+The Get Gited status displayed 83 rows. Dry-run proposed 3 publishes, 8 clones,
+18 initializations, 40 blockers and 14 skips. These proposals were not executed.
+Several of the 8 apparent remote-only rows were ownership-error local copies,
+including newly published PARTY_BOT and SYNQ; they are not truly missing clones.
+This is a downstream effect of the observed ownership/matching weakness, not
+authorization to clone or publish again. `study` remained LOCAL_ONLY despite an
+existing private remote; native Git/GitHub confirmed both sides were empty.
+
+The native verifier confirmed matching published branch SHAs for psycho,
+Get Gited WIP, both bot_aiogram variants, Utopia's preserved kostyak branch,
+SYNQ and EPBL. PARTY_BOT GitHub SHAs matched via direct `ls-remote`; fetch
+failed on a pre-existing invalid internal refs/codex/turn-diffs checkpoint.
+That local-ref error was kept separate from successful GitHub publication.
+LOPS's external remote could not be authenticated, so its cached AHEAD 4 was
+not treated as a current remote fact.
+
+One further observed matching limitation: kostyak has origin pointing to its
+original repository and an upstream on the utopia remote (TELECODE_AI). Status
+labels it with origin's identity even though the checked-out branch tracks the
+product repository. Regression extension: use two GitHub remotes with the
+current branch tracking the second and verify identity/sync context stays clear.

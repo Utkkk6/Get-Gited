@@ -103,6 +103,27 @@ class GitAdapter:
                 remotes[parts[0]] = parts[1]
         return tuple(RemoteInfo(name=n, url=u) for n, u in sorted(remotes.items()))
 
+    def list_staged_paths(self, path: Path) -> tuple[str, ...]:
+        """Repo-relative paths in the index (already staged). Never implies git add."""
+
+        repo_root = self._rev_parse_toplevel(path)
+        result = self._run(
+            repo_root,
+            ["diff", "--cached", "--name-only", "-z"],
+        )
+        return _split_z(result.stdout)
+
+    def list_unmerged_paths(self, path: Path) -> tuple[str, ...]:
+        repo_root = self._rev_parse_toplevel(path)
+        result = self._run(
+            repo_root,
+            ["diff", "--cached", "--diff-filter=U", "--name-only", "-z"],
+            check=False,
+        )
+        if result.exit_code not in {0, None}:
+            return ()
+        return _split_z(result.stdout)
+
     def _left_right_count(
         self, repo_root: Path, upstream: str
     ) -> tuple[int | None, int | None]:
@@ -128,6 +149,18 @@ class GitAdapter:
         # left = upstream-only (behind), right = HEAD-only (ahead)
         behind_s, ahead_s = parts
         return int(ahead_s), int(behind_s)
+
+
+def _split_z(stdout: str) -> tuple[str, ...]:
+    if not stdout:
+        return ()
+    paths: list[str] = []
+    for part in stdout.split("\0"):
+        text = part.strip()
+        if not text:
+            continue
+        paths.append(text.replace("\\", "/"))
+    return tuple(paths)
 
 
 def _parse_branch_header(

@@ -91,12 +91,17 @@ def redact_secret(value: str) -> str:
     return f"{value[:4]}…{value[-4:]}"
 
 
-def scan_tree_for_publish(root: Path) -> SafetyReport:
+def filename_looks_secret(name: str) -> bool:
+    return name in SECRET_FILENAMES or any(p.match(name) for p in SECRET_NAME_PATTERNS)
+
+
+def scan_paths_for_secrets(root: Path, rel_paths: tuple[str, ...]) -> SafetyReport:
+    """Scan specific repo-relative paths (staged files). No git add."""
+
     findings: list[Finding] = []
-    for path in _iter_files(root):
-        rel = str(path.relative_to(root)).replace("\\", "/")
-        name = path.name
-        if name in SECRET_FILENAMES or any(p.match(name) for p in SECRET_NAME_PATTERNS):
+    for rel in rel_paths:
+        path = root / Path(rel)
+        if filename_looks_secret(path.name):
             findings.append(
                 Finding(
                     kind="secret_file",
@@ -106,46 +111,27 @@ def scan_tree_for_publish(root: Path) -> SafetyReport:
                 )
             )
             continue
-        try:
-            size = path.stat().st_size
-        except OSError:
+        if not path.is_file():
             continue
-        if size >= GITHUB_HARD_LIMIT:
+        findings.extend(_content_and_size_findings(path, rel))
+    return SafetyReport(findings=tuple(findings))
+
+
+def scan_tree_for_publish(root: Path) -> SafetyReport:
+    findings: list[Finding] = []
+    for path in _iter_files(root):
+        rel = str(path.relative_to(root)).replace("\\", "/")
+        if filename_looks_secret(path.name):
             findings.append(
                 Finding(
-                    kind="large_file",
+                    kind="secret_file",
                     path=rel,
-                    summary=f"File exceeds GitHub hard limit: {rel}",
+                    summary=f"Sensitive filename: {rel}",
                     severity=FindingSeverity.BLOCK,
                 )
             )
-        elif size >= LARGE_FILE_WARN:
-            findings.append(
-                Finding(
-                    kind="large_file",
-                    path=rel,
-                    summary=f"Large file: {rel} ({size} bytes)",
-                    severity=FindingSeverity.WARNING,
-                )
-            )
-        if size > 1_000_000:
             continue
-        try:
-            text = path.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
-            continue
-        for pattern, label in SECRET_CONTENT_PATTERNS:
-            match = pattern.search(text)
-            if match:
-                findings.append(
-                    Finding(
-                        kind="secret_content",
-                        path=rel,
-                        summary=f"{label}: {redact_secret(match.group(0))}",
-                        severity=FindingSeverity.BLOCK,
-                    )
-                )
-                break
+        findings.extend(_content_and_size_findings(path, rel))
 
     gitignore = root / ".gitignore"
     if not gitignore.is_file():
@@ -188,7 +174,7 @@ def scan_git_history_for_secrets(
         name = Path(line.strip()).name
         if not name or name in seen:
             continue
-        if name in SECRET_FILENAMES or any(p.match(name) for p in SECRET_NAME_PATTERNS):
+        if filename_looks_secret(name):
             seen.add(name)
             findings.append(
                 Finding(
@@ -202,6 +188,51 @@ def scan_git_history_for_secrets(
                 )
             )
     return SafetyReport(findings=tuple(findings))
+
+
+def _content_and_size_findings(path: Path, rel: str) -> list[Finding]:
+    findings: list[Finding] = []
+    try:
+        size = path.stat().st_size
+    except OSError:
+        return findings
+    if size >= GITHUB_HARD_LIMIT:
+        findings.append(
+            Finding(
+                kind="large_file",
+                path=rel,
+                summary=f"File exceeds GitHub hard limit: {rel}",
+                severity=FindingSeverity.BLOCK,
+            )
+        )
+    elif size >= LARGE_FILE_WARN:
+        findings.append(
+            Finding(
+                kind="large_file",
+                path=rel,
+                summary=f"Large file: {rel} ({size} bytes)",
+                severity=FindingSeverity.WARNING,
+            )
+        )
+    if size > 1_000_000:
+        return findings
+    try:
+        text = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return findings
+    for pattern, label in SECRET_CONTENT_PATTERNS:
+        match = pattern.search(text)
+        if match:
+            findings.append(
+                Finding(
+                    kind="secret_content",
+                    path=rel,
+                    summary=f"{label}: {redact_secret(match.group(0))}",
+                    severity=FindingSeverity.BLOCK,
+                )
+            )
+            break
+    return findings
 
 
 def combine_reports(*reports: SafetyReport) -> SafetyReport:

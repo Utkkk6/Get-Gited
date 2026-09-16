@@ -13,6 +13,7 @@ class OperationType(StrEnum):
     PUBLISH = "PUBLISH"
     CLONE = "CLONE"
     INIT_GIT = "INIT_GIT"
+    COMMIT = "COMMIT"
     SHOW_DIFF = "SHOW_DIFF"
     OPEN_GITHUB = "OPEN_GITHUB"
     SKIP = "SKIP"
@@ -38,6 +39,8 @@ class PlannedOperation:
     nwo: str | None = None
     destination: Path | None = None
     visibility: str | None = None
+    message: str | None = None
+    paths: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)

@@ -131,6 +131,59 @@ def suggest_operation(row: ProjectStatusRow) -> PlannedOperation:
     )
 
 
+def plan_commit(
+    row: ProjectStatusRow,
+    *,
+    staged_paths: tuple[str, ...],
+    message: str = "",
+    blockers: tuple[str, ...] = (),
+) -> PlannedOperation:
+    """Build an explicit COMMIT. Never called by ``suggest_operation``."""
+
+    file_preview = (
+        tuple(f"staged: {path}" for path in staged_paths)
+        if staged_paths
+        else ("staged: (none)",)
+    )
+    trimmed = message.strip()
+    if trimmed:
+        message_preview = (f"git commit -- {len(staged_paths)} staged path(s)",)
+    else:
+        message_preview = ("git commit of staged files only (user message at confirm)",)
+
+    if blockers:
+        return PlannedOperation(
+            type=OperationType.COMMIT,
+            name=row.name,
+            risk=Risk.BLOCKED,
+            reason="; ".join(blockers),
+            preconditions=("explicit commit action", "already staged", "user message"),
+            preview=file_preview + (f"blocked: {blockers[0]}",),
+            path=row.path,
+            nwo=row.match.nwo,
+            message=trimmed or None,
+            paths=staged_paths,
+        )
+
+    return PlannedOperation(
+        type=OperationType.COMMIT,
+        name=row.name,
+        risk=Risk.WARNING,
+        reason="Commit already-staged files (explicit)",
+        preconditions=(
+            "user chose commit",
+            "index has staged files",
+            "user-supplied message",
+            "secret preflight",
+        ),
+        preview=file_preview + message_preview,
+        path=row.path,
+        nwo=row.match.nwo,
+        message=trimmed or None,
+        paths=staged_paths,
+    )
+
+
 def plan_operations(rows: list[ProjectStatusRow]) -> list[PlannedOperation]:
     return [suggest_operation(row) for row in rows]
 
@@ -145,6 +198,7 @@ def format_plan_preview(operations: list[PlannedOperation]) -> str:
         "Would publish": 0,
         "Would clone": 0,
         "Would init": 0,
+        "Would commit": 0,
         "Blocked": 0,
         "Skipped": 0,
     }
@@ -162,9 +216,14 @@ def format_plan_preview(operations: list[PlannedOperation]) -> str:
             counts["Would clone"] += 1
         elif op.type == OperationType.INIT_GIT:
             counts["Would init"] += 1
+        elif op.type == OperationType.COMMIT:
+            counts["Would commit"] += 1
         else:
             counts["Skipped"] += 1
         lines.append(f"{op.type:<10} {op.risk:<8} {op.name} — {op.reason}")
+        if op.type == OperationType.COMMIT:
+            for step in op.preview:
+                lines.append(f"           {step}")
 
     lines.append("")
     for label, value in counts.items():

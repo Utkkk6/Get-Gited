@@ -132,3 +132,15 @@ original repository and an upstream on the utopia remote (TELECODE_AI). Status
 labels it with origin's identity even though the checked-out branch tracks the
 product repository. Regression extension: use two GitHub remotes with the
 current branch tracking the second and verify identity/sync context stays clear.
+
+### ScreenNote approval follow-up
+
+After the user approved a separate PRIVATE ScreenNote repository, local-assistant
+was published to Utkkk6/ScreenNote. Native fetch, upstream and direct remote
+checks all matched `cebf0f6107f62cfb727cda8d9ec329094d4f0d1b`; its tree was clean.
+The same-root status/dry-run checks again exited 0, now displaying 84 rows and
+proposing 3 publishes, 9 clones, 18 initializations, 40 blockers and 14 skips.
+The additional clone proposal is ScreenNote despite its existing local source
+and exact origin: local-assistant remains an ownership ERROR. This reproduces
+the already documented downstream ownership/matching weakness. No proposed
+operations were executed. The earlier 83-row result above is the prior snapshot.
